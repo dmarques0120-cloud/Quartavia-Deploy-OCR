@@ -7,14 +7,14 @@ from pydantic import BaseModel, Field
 import pdfplumber
 import asyncio
 
-class PDFContentInput(BaseModel):
+class PDFExtractInput(BaseModel):
     """Schema para a PDFContentTool."""
     file_content_base64: str = Field(..., description="Conteúdo do arquivo PDF codificado em Base64.")
 
-class PDFContentTool(BaseTool):
+class PDFExtractTool(BaseTool):
     name: str = "Leitor de Conteúdo de PDF"
     description: str = "Extrai todo o conteúdo de texto de um arquivo PDF fornecido como uma string Base64."
-    args_schema: Type[BaseModel] = PDFContentInput
+    args_schema: Type[BaseModel] = PDFExtractInput
 
     def _run(self, file_content_base64: str) -> str:
         """Executado de forma síncrona, aceitando o conteúdo do arquivo em Base64."""
