@@ -13,12 +13,12 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from quartavia_ocr.tools.custom_tool import PDFExtractTool
+from quartavia_ocr.tools.custom_tool import PDFExtractInput, PDFTableExtractorTool
 import agentops
 import os
 from dotenv import load_dotenv
 
-pdf_tool = PDFExtractTool()
+pdf_tool = PDFTableExtractorTool()
 
 _=load_dotenv()
 AGENTOPS_API_KEY = os.getenv("AGENTOPS_API_KEY")
@@ -54,9 +54,9 @@ class QuartaviaOcr():
         )
 
     @task
-    def tarefa_extrair_dados(self) -> Task:
+    def tarefa_extrair_e_filtrar_dados(self) -> Task:
         return Task(
-            config=self.tasks_config['tarefa_extrair_dados'],
+            config=self.tasks_config['tarefa_extrair_e_filtrar_dados'],
         )
 
     @task

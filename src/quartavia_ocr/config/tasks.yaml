@@ -1,15 +1,46 @@
-tarefa_extrair_dados:
+tarefa_extrair_e_filtrar_dados:
   description: >
-    Localizar o arquivo PDF no path {file_path}. Usar a pdf_tool para abrir e extrair todos os dados textuais ou tabulares brutos das transações.
+    Localizar o arquivo PDF no path {file_path}.
+    1. Usar a pdf_tool para extrair SOMENTE os dados tabulares brutos.
+    2. Analisar os dados tabulares retornados e FILTRAR.
+    3. Remover todas as linhas que são cabeçalhos (ex: "Data", "Movimentação" [cite: 86]),
+       rodapés, totais (ex: "Total CARTÃO..." [cite: 86, 109]), 
+       informações de saldo (ex: "Saldo do dia:" [cite: 7]) ou
+       qualquer texto que não seja uma transação real.
   agent: agente_leitor_pdf
   expected_output: >
-    Uma lista ou texto contendo os dados brutos de todas as transações extraídas do PDF, prontas para processamento.
+    Uma string de texto limpa contendo *apenas* as linhas de transação 
+    (ex: "03 de set. 2025,,POSTO VIA ATLANTICA,,R$ 100,00" ou 
+    "Pix enviado: ""Cp :00360305..."",-R$ 70,00").
+    Manter o contexto de data se ela for um cabeçalho de seção[cite: 7].
 
 tarefa_categorizar_e_formatar:
   description: >
-    Analisar os dados brutos da tarefa anterior. Para cada transação, extrair a data, o nome da transação e o valor (não insira "-" na frente para valores negativos). Classificar cada transação em uma das categorias: [Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Dívidas e Empréstimos, Despesas Pessoais, Impostos e Taxas, Receitas (Salário/Renda), Investimentos, Resgates, Serviços Financeiros, Depósitos e Saques, Outros (caso não identifique a categoria)]. Compilar todas as transações em um único objeto JSON formatado.
+    Você recebeu o bloco de texto contendo os dados de 
+    transações extraídos e filtrados da tarefa anterior.
+
+    Sua única tarefa é analisar o bloco de texto fornecido.
+    Para cada linha de transação REAL que você encontrar dentro dele:
+    1. Extraia a 'data' (Se a data for um cabeçalho, use-a para as linhas seguintes).
+    2. Extraia o 'nome' (descrição).
+    3. Extraia o 'valor' (remova "R$", "-", "+" e formate como um número positivo).
+    4. Determine 'entrada ou saída' (baseado em palavras-chave como 'Pix enviado', 
+       'Pagamento', 'Pix recebido', 'Resgate', ou no sinal do valor original).
+    5. Classifique em uma das categorias: [Alimentação, Moradia, Transporte, 
+       Saúde, Educação, Lazer, Dívidas e Empréstimos, Despesas Pessoais, 
+       Impostos e Taxas, Receitas (Salário/Renda), Investimentos, Resgates, 
+       Serviços Financeiros, Depósitos e Saques, Outros].
+
+    Compile TODAS as transações válidas que você encontrar em um único 
+    objeto JSON formatado.
+    
+    **IMPORTANTE: Não invente dados. Se os dados acima estiverem vazios 
+    ou não contiverem transações, retorne um JSON com uma lista vazia.**
+    
+    Compilar TODAS as transações em um único objeto JSON formatado.
   agent: agente_processador_json
   context:
-    - tarefa_extrair_dados
+    - tarefa_extrair_e_filtrar_dados
   expected_output: >
-    Um único bloco de string JSON contendo uma lista de todas as transações, cada uma com 'data', 'nome', 'valor', 'categoria' e 'entrada ou saída' (para esse campo, considerar se é entrada ou saída de dinheiro).
+    Um único bloco de string JSON contendo uma lista de todas as transações, 
+    cada uma com 'data', 'nome', 'valor', 'categoria' e 'entrada ou saída'.
