@@ -1,6 +1,6 @@
 tarefa_extrair_dados:
   description: >
-    Usar a pdf_tool para abrir e extrair todos os dados textuais ou tabulares brutos das transações.
+    Localizar o arquivo PDF no path {file_path}. Usar a pdf_tool para abrir e extrair todos os dados textuais ou tabulares brutos das transações.
   agent: agente_leitor_pdf
   expected_output: >
     Uma lista ou texto contendo os dados brutos de todas as transações extraídas do PDF, prontas para processamento.
