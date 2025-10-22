@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 # Replace with inputs you want to test with, it will automatically
 # interpolate any tasks and agents information
 
-file_path = "C:/Users/dmarq/Downloads/Extrato-21-09-2025-a-21-10-2025-PDF.pdf"
+file_path = "https://uugjjiacxcqcpayzpthl.supabase.co/storage/v1/object/public/quartavia/uploads/1761140348_Extrato-21-09-2025-a-21-10-2025-PDF.pdf"
 
 def run():
     """
