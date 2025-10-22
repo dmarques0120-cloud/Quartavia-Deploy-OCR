@@ -1,0 +1,15 @@
+tarefa_extrair_dados:
+  description: >
+    Localizar o arquivo PDF no path {file_path}. Usar a pdf_tool para abrir e extrair todos os dados textuais ou tabulares brutos das transações.
+  agent: agente_leitor_pdf
+  expected_output: >
+    Uma lista ou texto contendo os dados brutos de todas as transações extraídas do PDF, prontas para processamento.
+
+tarefa_categorizar_e_formatar:
+  description: >
+    Analisar os dados brutos da tarefa anterior. Para cada transação, extrair a data, o nome da transação e o valor (não insira "-" na frente para valores negativos). Classificar cada transação em uma das categorias: [Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Dívidas e Empréstimos, Despesas Pessoais, Impostos e Taxas, Receitas (Salário/Renda), Investimentos, Resgates, Serviços Financeiros, Depósitos e Saques, Outros (caso não identifique a categoria)]. Compilar todas as transações em um único objeto JSON formatado.
+  agent: agente_processador_json
+  context:
+    - tarefa_extrair_dados
+  expected_output: >
+    Um único bloco de string JSON contendo uma lista de todas as transações, cada uma com 'data', 'nome', 'valor', 'categoria' e 'entrada ou saída' (para esse campo, considerar se é entrada ou saída de dinheiro).
