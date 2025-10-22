@@ -18,7 +18,7 @@ import agentops
 import os
 from dotenv import load_dotenv
 
-pdf_tool = PDFTableExtractorTool()
+pdf_tool = PDFTableExtractorTool()  
 
 _=load_dotenv()
 AGENTOPS_API_KEY = os.getenv("AGENTOPS_API_KEY")
@@ -39,30 +39,17 @@ class QuartaviaOcr():
     # https://docs.crewai.com/concepts/agents#agent-tools
 
     @agent
-    def agente_leitor_pdf(self) -> Agent:
+    def agente_processador_financeiro(self) -> Agent:
         return Agent(
-            config=self.agents_config['agente_leitor_pdf'],
+            config=self.agents_config['agente_processador_financeiro'],
             tools=[pdf_tool],
             verbose=True
         )
 
-    @agent
-    def agente_processador_json(self) -> Agent:
-        return Agent(
-            config=self.agents_config['agente_processador_json'],
-            verbose=True
-        )
-
     @task
-    def tarefa_extrair_e_filtrar_dados(self) -> Task:
+    def tarefa_processamento_completo(self) -> Task:
         return Task(
-            config=self.tasks_config['tarefa_extrair_e_filtrar_dados'],
-        )
-
-    @task
-    def tarefa_categorizar_e_formatar(self) -> Task:
-        return Task(
-            config=self.tasks_config['tarefa_categorizar_e_formatar'],
+            config=self.tasks_config['tarefa_processamento_completo'],
         )
 
     @crew
@@ -75,6 +62,6 @@ class QuartaviaOcr():
             agents=self.agents, # Automatically created by the @agent decorator
             tasks=self.tasks, # Automatically created by the @task decorator
             process=Process.sequential,
-            verbose=True,
+            verbose=True
             # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
         )

@@ -1,46 +1,39 @@
-tarefa_extrair_e_filtrar_dados:
+tarefa_processamento_completo:
   description: >
-    Localizar o arquivo PDF no path {file_path}.
-    1. Usar a pdf_tool para extrair SOMENTE os dados tabulares brutos.
-    2. Analisar os dados tabulares retornados e FILTRAR.
-    3. Remover todas as linhas que são cabeçalhos (ex: "Data", "Movimentação" [cite: 86]),
-       rodapés, totais (ex: "Total CARTÃO..." [cite: 86, 109]), 
-       informações de saldo (ex: "Saldo do dia:" [cite: 7]) ou
-       qualquer texto que não seja uma transação real.
-  agent: agente_leitor_pdf
-  expected_output: >
-    Uma string de texto limpa contendo *apenas* as linhas de transação 
-    (ex: "03 de set. 2025,,POSTO VIA ATLANTICA,,R$ 100,00" ou 
-    "Pix enviado: ""Cp :00360305..."",-R$ 70,00").
-    Manter o contexto de data se ela for um cabeçalho de seção[cite: 7].
-
-tarefa_categorizar_e_formatar:
-  description: >
-    Você recebeu o bloco de texto contendo os dados de 
-    transações extraídos e filtrados da tarefa anterior.
-
-    Sua única tarefa é analisar o bloco de texto fornecido.
-    Para cada linha de transação REAL que você encontrar dentro dele:
-    1. Extraia a 'data' (Se a data for um cabeçalho, use-a para as linhas seguintes).
-    2. Extraia o 'nome' (descrição).
-    3. Extraia o 'valor' (remova "R$", "-", "+" e formate como um número positivo).
-    4. Determine 'entrada ou saída' (baseado em palavras-chave como 'Pix enviado', 
-       'Pagamento', 'Pix recebido', 'Resgate', ou no sinal do valor original).
-    5. Classifique em uma das categorias: [Alimentação, Moradia, Transporte, 
-       Saúde, Educação, Lazer, Dívidas e Empréstimos, Despesas Pessoais, 
-       Impostos e Taxas, Receitas (Salário/Renda), Investimentos, Resgates, 
-       Serviços Financeiros, Depósitos e Saques, Outros].
+    Processar o arquivo financeiro localizado em {file_path}.
+    O processo completo é:
+    
+    1.  **USAR A FERRAMENTA:** Primeiro, use a `PDFTableExtractorTool` 
+        com o `file_path` para extrair todos os dados tabulares do PDF.
+    
+    2.  **ANALISAR E FORMATAR:** Analise os dados retirados das tabelas
+        e execute as seguintes ações:
+    
+    3.  **Filtrar:** Ignore mentalmente todas as linhas que são 
+        cabeçalhos ("Data", "Movimentação"), rodapés ("Total"), saldos 
+        ("Saldo do dia:") ou qualquer texto que não seja uma transação real.
+    
+    4.  **Extrair:** Para cada transação real que encontrar, extraia:
+        - 'data': A data da transação. (Atenção: em extratos, a data 
+          pode ser um cabeçalho de seção).
+        - 'nome': A descrição da transação.
+        - 'valor': O valor (sempre positivo, remova "R$" ou "-").
+        - 'entrada ou saída': Determine se é 'entrada' ou 'saída'.
+    
+    5.  **Categorizar:** Classifique a transação em uma das categorias: 
+        [Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, 
+        Dívidas e Empréstimos, Despesas Pessoais, Impostos e Taxas, 
+        Receitas (Salário/Renda), Investimentos, Resgates, 
+        Serviços Financeiros, Depósitos e Saques, Outros].
 
     Compile TODAS as transações válidas que você encontrar em um único 
     objeto JSON formatado.
     
-    **IMPORTANTE: Não invente dados. Se os dados acima estiverem vazios 
-    ou não contiverem transações, retorne um JSON com uma lista vazia.**
+    **IMPORTANTE: Não invente dados. Se os dados da ferramenta 
+    estiverem vazios ou não contiverem transações, retorne um JSON 
+    com uma lista vazia.**
     
-    Compilar TODAS as transações em um único objeto JSON formatado.
-  agent: agente_processador_json
-  context:
-    - tarefa_extrair_e_filtrar_dados
+  agent: agente_processador_financeiro
   expected_output: >
     Um único bloco de string JSON contendo uma lista de todas as transações, 
     cada uma com 'data', 'nome', 'valor', 'categoria' e 'entrada ou saída'.
