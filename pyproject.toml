@@ -7,7 +7,19 @@ authors = [
 ]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "crewai[tools]>=0.203.1,<1.0.0"
+    "crewai[tools]>=0.203.1,<1.0.0",
+    "agentops==0.4.21",
+    "httpx-sse==0.4.3",
+    "mcp==1.18.0",
+    "opentelemetry-instrumentation==0.59b0",
+    "ordered-set==4.1.0",
+    "psutil==7.0.0",
+    "python-multipart==0.0.20",
+    "socksio==1.0.0",
+    "sse-starlette==3.0.2",
+    "starlette==0.48.0",
+    "termcolor==2.4.0",
+    "wrapt==1.17.3"
 ]
 
 [project.scripts]
