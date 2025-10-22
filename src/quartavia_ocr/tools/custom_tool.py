@@ -1,72 +1,58 @@
+# Em seu projeto CrewAI
+import base64
+import io
 from typing import Type, Any
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 import pdfplumber
 import asyncio
-import os
 
+class PDFContentInput(BaseModel):
+    """Schema para a PDFContentTool."""
+    file_content_base64: str = Field(..., description="Conteúdo do arquivo PDF codificado em Base64.")
 
-class PDFExtractInput(BaseModel):
-    """Schema para a PDFExtractTool."""
-    file_path: str = Field(..., description="Caminho para o arquivo PDF a ser processado")
+class PDFContentTool(BaseTool):
+    name: str = "Leitor de Conteúdo de PDF"
+    description: str = "Extrai todo o conteúdo de texto de um arquivo PDF fornecido como uma string Base64."
+    args_schema: Type[BaseModel] = PDFContentInput
 
-
-class PDFExtractTool(BaseTool):
-    name: str = "Leitor de PDF"
-    description: str = "Extrai todo o conteúdo de texto de um arquivo PDF sem qualquer processamento ou estruturação"
-    args_schema: Type[BaseModel] = PDFExtractInput
-
-    def _extract_from_path(self, file_path: str) -> str:
-        """Internal helper that opens a file path and extracts text using pdfplumber."""
-        if not isinstance(file_path, str):
-            return "Erro: 'file_path' deve ser uma string com o caminho do arquivo."
-
-        if not os.path.exists(file_path):
-            return f"Erro: arquivo não encontrado: {file_path}"
+    def _run(self, file_content_base64: str) -> str:
+        """Executado de forma síncrona, aceitando o conteúdo do arquivo em Base64."""
+        if not isinstance(file_content_base64, str):
+            return "Erro: 'file_content_base64' deve ser uma string."
 
         try:
+            # Decodificar a string Base64 para bytes
+            decoded_bytes = base64.b64decode(file_content_base64)
+           
+            # Usar io.BytesIO para tratar os bytes como um arquivo em memória
+            pdf_file_in_memory = io.BytesIO(decoded_bytes)
+           
             full_text = []
-            with pdfplumber.open(file_path) as pdf:
+            # Abrir o PDF diretamente da memória
+            with pdfplumber.open(pdf_file_in_memory) as pdf:
+                if not pdf.pages:
+                    return "Erro: O PDF parece estar vazio ou corrompido."
+               
                 for page in pdf.pages:
                     text = page.extract_text()
                     if text:
                         full_text.append(text)
 
+            if not full_text:
+                return "Nenhum texto extraível encontrado no PDF."
+
             return "\n\n".join(full_text)
+        except base64.binascii.Error:
+            return "Erro: Falha ao decodificar a string Base64. Verifique se o conteúdo está formatado corretamente."
         except Exception as e:
-            return f"Erro ao processar o arquivo: {str(e)}"
+            # pdfplumber pode lançar exceções específicas que você pode querer tratar
+            return f"Erro ao processar o conteúdo do PDF: {str(e)}"
 
-    def _run(self, *args: Any, **kwargs: Any) -> str:
-        """
-        Executado de forma síncrona. Aceita as seguintes formas de entrada:
-         - PDFExtractInput (instância Pydantic)
-         - dict ou kwargs com chave 'file_path'
-         - string com o caminho como primeiro argumento
-        """
-        file_path: str | None = None
-
-        # 1) Primeiro argumento pode ser uma instância Pydantic, uma string ou um dict
-        if args:
-            first = args[0]
-            # instância do modelo
-            if isinstance(first, PDFExtractInput):
-                file_path = first.file_path
-            # string direta
-            elif isinstance(first, str):
-                file_path = first
-            # dict com file_path
-            elif isinstance(first, dict) and "file_path" in first:
-                file_path = first["file_path"]
-
-        # 2) kwargs
-        if not file_path and "file_path" in kwargs:
-            file_path = kwargs.get("file_path")
-
-        if not file_path:
-            return "Erro: parâmetro 'file_path' não informado."
-
-        return self._extract_from_path(file_path)
-
-    async def _arun(self, *args: Any, **kwargs: Any) -> str:
-        """Versão assíncrona que delega para _run sem bloquear o event loop."""
-        return await asyncio.to_thread(self._run, *args, **kwargs)
+    # Você não precisa mais do _arun se _run for rápido o suficiente ou se a lógica for a mesma
+    # Se a extração for muito lenta, manter a delegação para uma thread é uma boa ideia.
+    async def _arun(self, file_content_base64: str) -> str:
+        """Versão assíncrona que delega para _run."""
+        # Esta implementação é simples, mas para I/O real, você poderia usar uma biblioteca async
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._run, file_content_base64)
