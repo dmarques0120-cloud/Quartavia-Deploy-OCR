@@ -14,8 +14,6 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 # Replace with inputs you want to test with, it will automatically
 # interpolate any tasks and agents information
 
-file_path = input("Enter the path to the PDF file: ")
-
 def run():
     """
     Run the crew.
