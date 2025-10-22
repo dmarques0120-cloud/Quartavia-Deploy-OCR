@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import warnings
+import base64
 
 from datetime import datetime
 
@@ -19,12 +20,36 @@ def run():
     """
     Run the crew.
     """
-    inputs = {
-        'file_path': file_path
-    }
+    # Quando chamado via API, os inputs já virão no formato correto
+    # Esta função apenas passa os inputs adiante
+    def process_inputs(inputs):
+        # Verifica se recebemos os campos necessários
+        required_fields = ['file_content', 'filename', 'content_type']
+        for field in required_fields:
+            if field not in inputs:
+                raise ValueError(f"Missing required field: {field}")
+        
+        return inputs
 
     try:
+        # Se estivermos rodando via linha de comando, podemos adicionar essa lógica
+        if __name__ == "__main__":
+            file_path = input("Enter the path to the PDF file: ")
+            # Lê o arquivo e converte para base64
+            with open(file_path, 'rb') as f:
+                file_content = base64.b64encode(f.read()).decode('utf-8')
+            
+            inputs = {
+                'file_content': file_content,
+                'filename': file_path.split('/')[-1],
+                'content_type': 'application/pdf'
+            }
+        
+        # Processa os inputs (seja da API ou da linha de comando)
+        processed_inputs = process_inputs(inputs)
+
         QuartaviaOcr().crew().kickoff(inputs=inputs)
+
     except Exception as e:
         raise Exception(f"An error occurred while running the crew: {e}")
 
