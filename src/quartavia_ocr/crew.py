@@ -13,7 +13,7 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from quartavia_ocr.tools.custom_tool import PDFExtractInput, PDFTableExtractorTool
+from quartavia_ocr.tools.custom_tool import PDFTableExtractorTool
 import agentops
 import os
 from dotenv import load_dotenv
