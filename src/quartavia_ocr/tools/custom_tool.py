@@ -11,11 +11,13 @@ import traceback # Para logs de erro mais detalhados
 
 # --- IMPORTS PARA A FERRAMENTA DE OCR ---
 try:
-    from mistralai import Mistral
+    from openai import OpenAI
+    import base64
+    import fitz  # PyMuPDF para converter PDF em imagens
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
-    print("AVISO: Falta 'mistralai'. Execute: pip install mistralai")
+    print("AVISO: Falta 'openai' ou 'PyMuPDF'. Execute: pip install openai PyMuPDF")
 # -------------------------------------
 
 load_dotenv()
@@ -57,11 +59,37 @@ class NativePDFExtractorTool(BaseTool):
     def _clean_and_filter(self, text_lines: list[str]) -> str: return clean_and_filter_lines(text_lines)
     def _extract_text(self, pdf_page: pdfplumber.page.Page) -> list[str] | None:
         try:
-            text = pdf_page.extract_text(layout=True, use_text_flow=True, x_tolerance=1, y_tolerance=3) 
-            if text is None: text = pdf_page.extract_text()
-            if text is None: print(f"DEBUG: pdfplumber.extract_text retornou None."); return None 
+            # Primeira tentativa: extração com layout preservado
+            text = pdf_page.extract_text(layout=True, use_text_flow=True, x_tolerance=1, y_tolerance=3)
+            print(f"DEBUG: Primeira tentativa (layout=True): {text[:100] if text else 'None'}...")
+            
+            # Segunda tentativa: extração simples
+            if not text or text.strip() == "":
+                text = pdf_page.extract_text()
+                print(f"DEBUG: Segunda tentativa (simples): {text[:100] if text else 'None'}...")
+            
+            # Terceira tentativa: extração com diferentes tolerâncias
+            if not text or text.strip() == "":
+                text = pdf_page.extract_text(x_tolerance=3, y_tolerance=3)
+                print(f"DEBUG: Terceira tentativa (tolerância maior): {text[:100] if text else 'None'}...")
+            
+            # Quarta tentativa: extração de caracteres individuais
+            if not text or text.strip() == "":
+                chars = pdf_page.chars
+                if chars:
+                    text = " ".join([c.get('text', '') for c in chars if c.get('text', '').strip()])
+                    print(f"DEBUG: Quarta tentativa (chars): {text[:100] if text else 'None'}...")
+            
+            if not text or text.strip() == "":
+                print(f"DEBUG: TODAS as tentativas de extração falharam.")
+                return None
+                
+            print(f"DEBUG: Texto extraído com sucesso: {len(text)} caracteres")
             return text.split('\n')
-        except Exception as e: print(f"DEBUG: pdfplumber falhou ao extrair texto: {e}"); return None
+            
+        except Exception as e: 
+            print(f"DEBUG: pdfplumber falhou ao extrair texto: {e}")
+            return None
     def _download_from_url(self, url: str) -> str | None:
         try:
             response = requests.get(url, stream=True); response.raise_for_status()
@@ -71,38 +99,91 @@ class NativePDFExtractorTool(BaseTool):
                 return tmp_file.name
         except Exception: return None
     def _extract_from_path(self, file_path: str) -> str:
-        if not isinstance(file_path, str): return "Erro: 'file_path' ..."
-        parsed_url = urlparse(file_path); is_url = parsed_url.scheme in ['http', 'https']
+        print(f"DEBUG: _extract_from_path iniciado com: {file_path}")
+        if not isinstance(file_path, str): 
+            print("DEBUG: file_path não é string")
+            return "Erro: 'file_path' deve ser uma string válida."
+        
+        parsed_url = urlparse(file_path)
+        is_url = parsed_url.scheme in ['http', 'https']
         temp_path_to_clean = None
+        
         if is_url:
-            print(f"DEBUG: NativeTool baixando URL: {file_path}"); local_pdf_path = self._download_from_url(file_path)
-            if not local_pdf_path: return f"Erro: download..."; temp_path_to_clean = local_pdf_path
-        elif os.path.exists(file_path): print(f"DEBUG: NativeTool usando path local: {file_path}"); local_pdf_path = file_path
-        else: return f"Erro: arquivo não encontrado: {file_path}"
-        all_filtered_data = []; has_relevant_content = False; pdf_seems_empty_or_image = True 
+            print(f"DEBUG: NativeTool baixando URL: {file_path}")
+            local_pdf_path = self._download_from_url(file_path)
+            if not local_pdf_path: 
+                print("DEBUG: Falha no download")
+                return f"Erro: Falha ao baixar PDF da URL."
+            temp_path_to_clean = local_pdf_path
+            print(f"DEBUG: PDF baixado para: {local_pdf_path}")
+        elif os.path.exists(file_path): 
+            print(f"DEBUG: NativeTool usando path local: {file_path}")
+            local_pdf_path = file_path
+        else: 
+            print(f"DEBUG: Arquivo não encontrado: {file_path}")
+            return f"Erro: arquivo não encontrado: {file_path}"
+        all_filtered_data = []
+        has_relevant_content = False
+        pdf_seems_empty_or_image = True 
+        total_text_chars = 0
+        all_raw_text = []  # Para armazenar texto bruto caso o filtro seja muito restritivo
+        
+        print(f"DEBUG: Iniciando processamento do PDF: {local_pdf_path}")
+        
         try:
+            print(f"DEBUG: Tentando abrir PDF com pdfplumber...")
             with pdfplumber.open(local_pdf_path) as pdf:
-                print("DEBUG: Tentando extrair texto nativo com pdfplumber...")
+                print(f"DEBUG: PDF aberto com sucesso! Número de páginas: {len(pdf.pages)}")
+                print(f"DEBUG: Tentando extrair texto nativo com pdfplumber de {len(pdf.pages)} páginas...")
+                
                 for i, page in enumerate(pdf.pages):
                     extracted_lines = self._extract_text(page) 
-                    if extracted_lines is None: print(f"DEBUG: Falha ao extrair texto nativo da página {i+1}."); continue 
+                    
+                    if extracted_lines is None: 
+                        continue 
+                    
+                    # Se conseguiu extrair algo, marca que o PDF não é uma imagem
                     pdf_seems_empty_or_image = False 
+                    
                     raw_page_text = "\n".join(extracted_lines).strip()
+                    total_text_chars += len(raw_page_text)
+                    
                     if raw_page_text:
+                        all_raw_text.append(f"\n--- PÁGINA {i+1} (BRUTO) ---\n{raw_page_text}")
+                        
                         filtered_text = self._clean_and_filter(extracted_lines)
+                        
                         if filtered_text:
-                           all_filtered_data.append(f"\n--- DADOS (PÁGINA {i+1}) ---\n"); all_filtered_data.append("Método: Texto Nativo\n"); all_filtered_data.append(filtered_text); has_relevant_content = True 
+                            all_filtered_data.append(f"\n--- DADOS (PÁGINA {i+1}) ---\n")
+                            all_filtered_data.append("Método: Texto Nativo\n")
+                            all_filtered_data.append(filtered_text)
+                            has_relevant_content = True
+                        
+            # Análise dos resultados
             if not pdf_seems_empty_or_image:
-                if has_relevant_content: print("DEBUG: pdfplumber extraiu conteúdo relevante."); return "\n".join(all_filtered_data)
-                else: print("DEBUG: pdfplumber extraiu texto, mas filtro removeu tudo."); return "Texto nativo extraído, mas nenhum dado relevante encontrado após o filtro." 
-            else: print("DEBUG: pdfplumber não extraiu NENHUM texto. Sugerindo OCR."); return "Erro: O PDF parece ser uma imagem ou está vazio/ilegível. Tente a ferramenta de OCR."
-        except Exception as e: print(f"DEBUG: pdfplumber falhou ao abrir/processar: {e}. Sugerindo OCR."); return "Erro: O PDF parece ser uma imagem ou está corrompido. Tente a ferramenta de OCR."
+                if has_relevant_content: 
+                    final_result = "\n".join(all_filtered_data)
+                    return final_result
+                else: 
+                    # Retorna pelo menos o texto bruto se o filtro removeu tudo
+                    if total_text_chars > 50:  # Se há texto suficiente, retorna sem filtro
+                        return "\n--- DADOS (SEM FILTRO) ---\n" + "\n".join(all_raw_text)
+                    else:
+                        return "Texto nativo extraído, mas nenhum dado relevante encontrado após o filtro." 
+            else: 
+                return "Erro: O PDF parece ser uma imagem ou está vazio/ilegível. Tente a ferramenta de OCR."
+                
+        except Exception as e: 
+            print(f"ERRO: pdfplumber falhou ao processar PDF: {e}")
+            return "Erro: O PDF parece ser uma imagem ou está corrompido. Tente a ferramenta de OCR."
         finally:
             if temp_path_to_clean and os.path.exists(temp_path_to_clean):
                 try: os.unlink(temp_path_to_clean)
                 except: pass
     def _run(self, file_path: str) -> str:
-        if not file_path or not isinstance(file_path, str): return f"Erro: 'file_path' ..."; return self._extract_from_path(file_path)
+        if not file_path or not isinstance(file_path, str): 
+            return "Erro: 'file_path' deve ser uma string válida."
+        return self._extract_from_path(file_path)
     async def _arun(self, file_path: str) -> str: return await asyncio.to_thread(self._run, file_path=file_path)
 
 
@@ -112,95 +193,205 @@ class NativePDFExtractorTool(BaseTool):
 
 class PDFToOCRTool(BaseTool):
     name: str = "Extrator de PDF (OCR)"
-    description: str = "LENTO. Usa a API Mistral OCR..." # (inalterado)
+    description: str = "LENTO. Usa a API OpenAI GPT-4.1-nano para OCR de PDFs através de análise de imagem."
     
     client: Any = None 
     api_key: str = None
+    model_name: str = None
 
     IGNORE_KEYWORDS: ClassVar[list[str]] = IGNORE_KEYWORDS_GLOBAL
     KEEP_KEYWORDS: ClassVar[list[str]] = KEEP_KEYWORDS_GLOBAL
 
     def __init__(self):
         super().__init__()
-        print("DEBUG: Iniciando __init__ da PDFToOCRTool...") # Log de início
+        print("DEBUG: Iniciando __init__ da PDFToOCRTool (OpenAI)...")
         if not OCR_AVAILABLE: 
-            print("ERRO FATAL: PDFToOCRTool __init__ falhou: Falta 'mistralai'."); self.client = None; return
+            print("ERRO FATAL: PDFToOCRTool __init__ falhou: Falta 'openai' ou 'PyMuPDF'."); self.client = None; return
             
         # --- DEBUG APRIMORADO ---
         try:
-            self.api_key = os.getenv("MISTRAL_API_KEY")
+            self.api_key = os.getenv("OPENAI_API_KEY")
             if not self.api_key:
-                print("ERRO CRÍTICO no __init__: MISTRAL_API_KEY não encontrada nas variáveis de ambiente.")
+                print("ERRO CRÍTICO no __init__: OPENAI_API_KEY não encontrada nas variáveis de ambiente.")
                 self.client = None
-                return # Sai se a chave não for encontrada
+                return
+
+            self.model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-nano")
+            print(f"DEBUG no __init__: Usando modelo: {self.model_name}")
 
             # Loga a chave parcialmente mascarada
             masked_key = self.api_key[:5] + "****" + self.api_key[-4:] if len(self.api_key) > 9 else "****"
-            print(f"DEBUG no __init__: MISTRAL_API_KEY encontrada: '{masked_key}'")
+            print(f"DEBUG no __init__: OPENAI_API_KEY encontrada: '{masked_key}'")
 
             # Tenta inicializar o cliente e loga sucesso ou falha específica
-            print("DEBUG no __init__: Tentando inicializar cliente Mistral...")
-            self.client = Mistral(api_key=self.api_key)
-            print("DEBUG no __init__: Cliente Mistral inicializado com SUCESSO.")
+            print("DEBUG no __init__: Tentando inicializar cliente OpenAI...")
+            self.client = OpenAI(api_key=self.api_key)
+            print("DEBUG no __init__: Cliente OpenAI inicializado com SUCESSO.")
 
         except Exception as e:
             # Loga o erro EXATO que ocorreu durante a inicialização
-            print(f"ERRO CRÍTICO no __init__: Falha ao inicializar o cliente Mistral. Verifique a API Key ou conectividade. Erro: {type(e).__name__} - {e}")
-            print(f"DEBUG Traceback __init__:\n{traceback.format_exc()}") # Log completo do erro
-            self.client = None # Garante que client é None se a inicialização falhar
+            print(f"ERRO CRÍTICO no __init__: Falha ao inicializar o cliente OpenAI. Verifique a API Key ou conectividade. Erro: {type(e).__name__} - {e}")
+            print(f"DEBUG Traceback __init__:\n{traceback.format_exc()}")
+            self.client = None
         # --- FIM DO DEBUG APRIMORADO ---
             
     def _clean_and_filter(self, text_lines: list[str]) -> str:
-        # (Inalterado)
         return clean_and_filter_lines(text_lines)
+    
+    def _encode_image(self, image_bytes: bytes) -> str:
+        """Codifica bytes de imagem em base64"""
+        return base64.b64encode(image_bytes).decode('utf-8')
+    
+    def _pdf_to_images_base64(self, pdf_path: str) -> list[str]:
+        """Converte PDF para lista de imagens em base64"""
+        try:
+            pdf_document = fitz.open(pdf_path)
+            images_b64 = []
+            
+            for page_num in range(len(pdf_document)):
+                page = pdf_document.load_page(page_num)
+                # Renderiza a página como imagem (PNG)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom para melhor qualidade
+                img_data = pix.tobytes("png")
+                b64_string = self._encode_image(img_data)
+                images_b64.append(b64_string)
+                
+            pdf_document.close()
+            return images_b64
+            
+        except Exception as e:
+            print(f"ERRO ao converter PDF para imagens: {e}")
+            print(f"DEBUG Traceback PDF->Imagem:\n{traceback.format_exc()}")
+            return []
         
     def _run(self, file_path: str) -> str:
-        """Executa a extração OCR via API Mistral, aceitando apenas URLs."""
-        print("DEBUG: Iniciando _run da PDFToOCRTool...") # Log de início do run
-        if not OCR_AVAILABLE: return "Erro: Falta 'mistralai'." 
+        """Executa a extração OCR via API OpenAI GPT-4.1-nano, aceitando URLs e arquivos locais."""
+        print("DEBUG: Iniciando _run da PDFToOCRTool (OpenAI)...")
+        if not OCR_AVAILABLE: 
+            return "Erro: Falta 'openai' ou 'PyMuPDF'." 
         
         # Checa se o cliente foi inicializado com sucesso no __init__
         if not self.client: 
-            print("ERRO no _run: Cliente Mistral não está inicializado. Verifique logs do __init__.")
-            return "Erro: Cliente Mistral não inicializado. Verifique a configuração da API Key ou logs de inicialização."
+            print("ERRO no _run: Cliente OpenAI não está inicializado. Verifique logs do __init__.")
+            return "Erro: Cliente OpenAI não inicializado. Verifique a configuração da API Key ou logs de inicialização."
             
-        if not file_path or not isinstance(file_path, str): return f"Erro: 'file_path'..."
+        if not file_path or not isinstance(file_path, str): 
+            return "Erro: 'file_path' deve ser uma string válida."
 
-        parsed_url = urlparse(file_path); is_url = parsed_url.scheme in ['http', 'https']
-        if not is_url: print(f"DEBUG: OCR Tool só aceita URLs."); return "Erro: OCR só funciona com URLs."
+        parsed_url = urlparse(file_path)
+        is_url = parsed_url.scheme in ['http', 'https']
+        temp_path_to_clean = None
+        
+        # Determina o caminho local do PDF
+        if is_url:
+            print(f"DEBUG: OCR Tool baixando URL: {file_path}")
+            local_pdf_path = self._download_from_url(file_path)
+            if not local_pdf_path: 
+                return "Erro: Falha ao baixar PDF da URL."
+            temp_path_to_clean = local_pdf_path
+        elif os.path.exists(file_path):
+            print(f"DEBUG: OCR Tool usando path local: {file_path}")
+            local_pdf_path = file_path
+        else:
+            return f"Erro: arquivo não encontrado: {file_path}"
 
         try:
-            print(f"DEBUG: Preparando para chamar Mistral OCR SDK para URL: {file_path}...")
-            ocr_response = self.client.ocr.process(
-                model="mistral-ocr-latest", 
-                document={"type": "document_url", "document_url": file_path }
-            )
-            # (Resto da lógica de processamento da resposta e filtro - inalterado)
-            # ...
-            print("--- DEBUG RESPOSTA MISTRAL OCR ---")
-            print(f"Tipo da Resposta: {type(ocr_response)}")
-            try: print(f"Conteúdo (vars): {vars(ocr_response)}") 
-            except TypeError: print(f"Conteúdo (raw): {ocr_response}")
-            print("--- FIM DEBUG RESPOSTA ---")
-            extracted_text = ""; 
-            if hasattr(ocr_response, 'pages') and isinstance(ocr_response.pages, list) and ocr_response.pages:
-                all_markdowns = [getattr(page, "markdown", "") for page in ocr_response.pages]
-                extracted_text = "\n\n".join(md for md in all_markdowns if md)
-                if not extracted_text: print(f"AVISO: 'markdown' vazio em pages. Resp: {ocr_response}")
-            else: print(f"AVISO: 'pages' não encontrado/vazio. Resp: {ocr_response}")
-            print(f"DEBUG: Texto bruto API: '{extracted_text[:150]}...'")
-            filtered_text = self._clean_and_filter(extracted_text.split('\n'))
-            print("DEBUG: Processamento OCR API concluído.")
-            output = f"\n--- DADOS OCR (API Mistral) ---\n"
-            if filtered_text: output += filtered_text
-            else: output += "(Nenhum dado relevante encontrado após o filtro)"; print("DEBUG: Texto API filtrado/vazio.")
+            print(f"DEBUG: Convertendo PDF para imagens base64...")
+            images_b64 = self._pdf_to_images_base64(local_pdf_path)
+            
+            if not images_b64:
+                return "Erro: Falha ao converter PDF em imagens."
+            
+            print(f"DEBUG: {len(images_b64)} páginas convertidas. Processando com OpenAI...")
+            
+            all_extracted_text = []
+            
+            for i, img_b64 in enumerate(images_b64):
+                try:
+                    print(f"DEBUG: Processando página {i+1}/{len(images_b64)} com GPT-4.1-nano...")
+                    
+                    response = self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text", 
+                                        "text": "Analise esta imagem de um documento financeiro (extrato bancário, fatura de cartão, etc.) e extraia TODOS os dados textuais visíveis. Retorne apenas o texto extraído, sem comentários ou formatação adicional. Mantenha a estrutura original o máximo possível."
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{img_b64}"
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        max_tokens=4000,
+                        temperature=0.1
+                    )
+                    
+                    page_text = response.choices[0].message.content.strip()
+                    if page_text:
+                        all_extracted_text.append(f"\n--- PÁGINA {i+1} ---\n{page_text}")
+                        print(f"DEBUG: Página {i+1} processada com sucesso.")
+                    else:
+                        print(f"DEBUG: Página {i+1} retornou texto vazio.")
+                        
+                except Exception as page_error:
+                    print(f"ERRO ao processar página {i+1}: {page_error}")
+                    continue
+            
+            if not all_extracted_text:
+                return "Erro: Nenhum texto foi extraído de nenhuma página."
+            
+            # Junta todo o texto extraído
+            raw_text = "\n".join(all_extracted_text)
+            print(f"DEBUG: Texto bruto extraído: '{raw_text[:200]}...'")
+            
+            # Aplica filtro
+            filtered_text = self._clean_and_filter(raw_text.split('\n'))
+            print("DEBUG: Processamento OCR OpenAI concluído.")
+            
+            output = f"\n--- DADOS OCR (OpenAI GPT-4.1-nano) ---\n"
+            if filtered_text: 
+                output += filtered_text
+            else: 
+                output += "(Nenhum dado relevante encontrado após o filtro)"
+                print("DEBUG: Texto filtrado/vazio.")
+            
             return output
+            
         except Exception as api_error: 
-            error_message = f"Erro API Mistral (SDK): {type(api_error).__name__} - {api_error}. Verifique API Key/Permissões/URL."
-            if hasattr(api_error, 'response') and api_error.response is not None: error_message += f" Status: {api_error.response.status_code}. Detalhe: {api_error.response.text}"
-            print(error_message); print(f"ERRO DETALHADO OCR:\n{traceback.format_exc()}") 
+            error_message = f"Erro API OpenAI: {type(api_error).__name__} - {api_error}. Verifique API Key/Permissões/Conectividade."
+            print(error_message)
+            print(f"ERRO DETALHADO OCR:\n{traceback.format_exc()}") 
             return error_message
+            
+        finally:
+            # Limpa arquivo temporário se foi baixado
+            if temp_path_to_clean and os.path.exists(temp_path_to_clean):
+                try: 
+                    os.unlink(temp_path_to_clean)
+                except: 
+                    pass
+    
+    def _download_from_url(self, url: str) -> str | None:
+        """Baixa PDF de uma URL e retorna o caminho do arquivo temporário"""
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk: 
+                        tmp_file.write(chunk)
+                return tmp_file.name
+        except Exception as e:
+            print(f"ERRO ao baixar URL: {e}")
+            return None
         
     async def _arun(self, file_path: str) -> str:
-        """Versão assíncrona."""
+        """Versão assíncrona para OpenAI OCR."""
         return await asyncio.to_thread(self._run, file_path=file_path)
