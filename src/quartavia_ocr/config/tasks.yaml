@@ -3,24 +3,29 @@ tarefa_processamento_completo:
     Processar o arquivo financeiro localizado em {file_path}.
     O processo completo é:
     
-    1.  **USAR A FERRAMENTA:** Primeiro, use a `PDFTableExtractorTool` 
-        com o `file_path` para extrair todos os dados tabulares do PDF.
+    1.  **PRIMEIRA TENTATIVA:** Use a ferramenta "Extrator de PDF Nativo". 
+        Esta é a ferramenta preferida e mais rápida.
     
-    2.  **ANALISAR E FORMATAR:** Analise os dados retirados das tabelas
-        e execute as seguintes ações:
+    2.  **SE FALHAR:** Se a "Extrator de PDF Nativo" retornar um erro 
+        (especialmente um erro dizendo "O PDF parece ser uma imagem"), 
+        então, e *somente então*, use a ferramenta "Extrator de PDF (OCR)" 
+        no mesmo {file_path}.
     
-    3.  **Filtrar:** Ignore mentalmente todas as linhas que são 
+    3.  **ANALISAR E FORMATAR:** Assim que tiver o texto de UMA das ferramentas,
+        analise-o.
+
+    4.  **Filtrar:** Ignore mentalmente todas as linhas que são 
         cabeçalhos ("Data", "Movimentação"), rodapés ("Total"), saldos 
         ("Saldo do dia:") ou qualquer texto que não seja uma transação real.
     
-    4.  **Extrair:** Para cada transação real que encontrar, extraia:
+    5.  **Extrair:** Para cada transação real que encontrar, extraia:
         - 'data': A data da transação. (Atenção: em extratos, a data 
           pode ser um cabeçalho de seção).
         - 'nome': A descrição da transação.
         - 'valor': O valor (sempre positivo, remova "R$" ou "-").
         - 'entrada ou saída': Determine se é 'entrada' ou 'saída'.
     
-    5.  **Categorizar:** Classifique a transação em uma das categorias: 
+    6.  **Categorizar:** Classifique a transação em uma das categorias: 
         [Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, 
         Dívidas e Empréstimos, Despesas Pessoais, Impostos e Taxas, 
         Receitas (Salário/Renda), Investimentos, Resgates, 

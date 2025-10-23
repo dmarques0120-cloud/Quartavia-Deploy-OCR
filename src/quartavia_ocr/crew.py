@@ -13,12 +13,12 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from quartavia_ocr.tools.custom_tool import PDFTableExtractorTool
+from quartavia_ocr.tools.custom_tool import NativePDFExtractorTool, PDFToOCRTool
 import agentops
 import os
 from dotenv import load_dotenv
 
-pdf_tool = PDFTableExtractorTool()  
+pdf_tool = NativePDFExtractorTool()
 
 _=load_dotenv()
 AGENTOPS_API_KEY = os.getenv("AGENTOPS_API_KEY")
@@ -42,7 +42,7 @@ class QuartaviaOcr():
     def agente_processador_financeiro(self) -> Agent:
         return Agent(
             config=self.agents_config['agente_processador_financeiro'],
-            tools=[pdf_tool],
+            tools=[pdf_tool, PDFToOCRTool()],
             verbose=True
         )
 

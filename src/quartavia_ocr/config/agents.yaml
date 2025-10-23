@@ -2,7 +2,7 @@ agente_processador_financeiro:
   role: >
     Especialista em Análise de Extratos Financeiros.
   goal: >
-    Utilizar a pdf_tool para extrair dados brutos de tabelas de um PDF (extrato ou fatura)
+    Utilizar a pdf_tool ou ocr_tool para extrair dados brutos de tabelas, texto ou imagem (nessa ordem de prioridade) de um PDF (extrato ou fatura)
     e, em uma única etapa, processar esses dados para:
     Em uma única etapa, analisar esses dados para:
     1. Identificar e ignorar linhas irrelevantes (cabeçalhos, totais, rodapés).
