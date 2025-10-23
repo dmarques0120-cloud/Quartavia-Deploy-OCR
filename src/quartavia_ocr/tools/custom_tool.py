@@ -6,21 +6,21 @@ import requests
 from urllib.parse import urlparse
 from typing import Type, Any, ClassVar
 from crewai.tools import BaseTool
-import io
-import numpy as np
+from dotenv import load_dotenv
+import traceback # Para logs de erro mais detalhados
 
 # --- IMPORTS PARA A FERRAMENTA DE OCR ---
 try:
-    import easyocr
-    import fitz  # Importa PyMuPDF
+    from mistralai import Mistral 
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
-    print("AVISO: Falta 'easyocr' ou 'PyMuPDF'.")
-    print("Execute: pip install easyocr PyMuPDF torch torchvision torchaudio")
+    print("AVISO: Falta 'mistralai'. Execute: pip install mistralai")
 # -------------------------------------
 
-# Constantes de palavras-chave movidas para fora para serem usadas por ambas as tools
+load_dotenv()
+
+# Constantes de palavras-chave (mantidas)
 IGNORE_KEYWORDS_GLOBAL = [
     'total', 'data', 'movimentação', 'beneficiário', 'valor', 'limite de crédito', 
     'pagamento mínimo', 'encargos', 'fale com a gente', 'ouvidoria', 'sac', 
@@ -28,59 +28,34 @@ IGNORE_KEYWORDS_GLOBAL = [
     'resumo da fatura', 'despesas do mês', 'pontos loop', 'fatura anterior', 
     'créditos e estornos', 'total da fatura', 'juros', 'iof', 'taxas', 
     'lançamentos nacionais', 'compras à vista', 'outros valores', 'histórico',
-    'moeda de origem', 'cotação us$', 'aplicativo bradesco', 'situação do extrato' # Adicionadas do Bradesco.pdf
+    'moeda de origem', 'cotação us$', 'aplicativo bradesco', 'situação do extrato'
 ]
-KEEP_KEYWORDS_GLOBAL = ['saldo do dia'] # Mantém cabeçalhos importantes
+KEEP_KEYWORDS_GLOBAL = ['saldo do dia']
 
-
+# Função de filtro (mantida)
 def clean_and_filter_lines(text_lines: list[str]) -> str:
-    """Função helper refatorada para filtrar linhas."""
+    # (Função inalterada)
     filtered_data = []
     for line in text_lines:
         line_strip = line.strip()
-        if not line_strip or len(line_strip) < 2 : continue # Pula vazias ou muito curtas
-
+        if not line_strip or (len(line_strip) < 3 and not line_strip.lower() in ['r$', 'rs', 'usd', 'us$', 'uss']): continue
         line_lower = line_strip.lower()
-
-        # Verifica se é explicitamente lixo (e NÃO é um header importante)
         is_junk = any(keyword in line_lower for keyword in IGNORE_KEYWORDS_GLOBAL)
         is_context_header = any(keyword in line_lower for keyword in KEEP_KEYWORDS_GLOBAL)
-        
-        if is_junk and not is_context_header:
-            # print(f"DEBUG Filter: Discarding junk: '{line_strip}'")
-            continue
-
-        # Verifica se tem números ou símbolos de moeda comuns
-        has_numbers_or_currency = (
-            any(char.isdigit() for char in line_strip) or 
-            'r$' in line_lower or 
-            'usd' in line_lower or
-            'us$' in line_lower
-        )
-
-        # Verifica se parece um nome/descrição (contém letras)
+        if is_junk and not is_context_header: continue
+        has_numbers_or_currency = (any(char.isdigit() for char in line_strip) or 
+                                   line_strip.lower() in ['r$', 'rs', 'usd', 'us$', 'uss'])
         has_letters = any(c.isalpha() for c in line_strip)
-
-        # --- LÓGICA DE MANTER REFINADA ---
-        # Mantém se:
-        # 1. É um cabeçalho importante (saldo do dia)
-        # 2. OU Tem números/moeda (provável data, valor, cotação)
-        # 3. OU Tem letras E NÃO é apenas lixo curto (provável nome/descrição)
-        if is_context_header or has_numbers_or_currency or (has_letters and len(line_strip) > 3):
-            # Adiciona uma checagem final para ruídos comuns que passam
+        if is_context_header or has_numbers_or_currency or (has_letters and not is_junk):
              noise = ['rs', 'uss', 'usd', 'us$']
-             if line_lower not in noise or has_numbers_or_currency: # Mantem R$ 5,89 mas remove 'rs' sozinho
+             if line_lower not in noise or has_numbers_or_currency:
                 filtered_data.append(line_strip)
-                # print(f"DEBUG Filter: Keeping: '{line_strip}'")
-            # else:
-                # print(f"DEBUG Filter: Discarding noise: '{line_strip}'")
-
-        # else:
-            # print(f"DEBUG Filter: Discarding other: '{line_strip}'")
-            
     return "\n".join(filtered_data)
 
 
+# ##################################################################
+# FERRAMENTA 1: EXTRATOR DE TEXTO NATIVO (RÁPIDO)
+# ##################################################################
 # ##################################################################
 # FERRAMENTA 1: EXTRATOR DE TEXTO NATIVO (RÁPIDO)
 # ##################################################################
@@ -176,113 +151,109 @@ class NativePDFExtractorTool(BaseTool):
 
 
 # ##################################################################
-# FERRAMENTA 2: EXTRATOR OCR (PLANO B) - Versão EasyOCR Ajustada
+# FERRAMENTA 2: EXTRATOR OCR (PLANO B) - Versão SDK Mistral Correta
 # ##################################################################
 
 class PDFToOCRTool(BaseTool):
     name: str = "Extrator de PDF (OCR)"
     description: str = (
-        "LENTO. Usa EasyOCR para ler PDFs scaneados/de imagem. "
-        "Use esta ferramenta *apenas* se o 'Extrator de Texto Nativo PDF' falhar."
+        "LENTO. Usa a API Mistral OCR para ler PDFs scaneados/de imagem. "
+        "Esta ferramenta SÓ FUNCIONA COM URLs PÚBLICAS. " 
+        "Use *apenas* se o 'Extrator de Texto Nativo PDF' falhar E o input for uma URL."
     )
     
-    reader: Any = None 
+    client: Any = None 
+    api_key: str = None
 
-    # Usa as constantes globais
     IGNORE_KEYWORDS: ClassVar[list[str]] = IGNORE_KEYWORDS_GLOBAL
     KEEP_KEYWORDS: ClassVar[list[str]] = KEEP_KEYWORDS_GLOBAL
 
     def __init__(self):
         super().__init__()
-        if not OCR_AVAILABLE:
-            print("ERRO FATAL: PDFToOCRTool não pode ser inicializada. Falta 'easyocr' ou 'PyMuPDF'.")
-            self.reader = None
-            return
-        try:
-            print("DEBUG: Inicializando EasyOCR Reader para Português...")
-            # gpu=True tentará usar a GPU se disponível, caso contrário fallback para CPU
-            self.reader = easyocr.Reader(['pt'], gpu=True) 
-            print("DEBUG: EasyOCR Reader inicializado.")
-        except Exception as e:
-            print(f"ERRO CRÍTICO: Não foi possível inicializar o EasyOCR Reader. Erro: {e}")
-            self.reader = None
-    
+        if not OCR_AVAILABLE: 
+            print("ERRO FATAL: PDFToOCRTool não pode ser inicializada. Falta 'mistralai'."); self.client = None; return
+            
+        self.api_key = os.getenv("MISTRAL_API_KEY")
+        if not self.api_key:
+            print("ERRO CRÍTICO: MISTRAL_API_KEY não encontrada nas variáveis de ambiente."); self.client = None
+        else:
+            try:
+                self.client = Mistral(api_key=self.api_key)
+                print("DEBUG: Cliente Mistral inicializado com sucesso.")
+            except Exception as e:
+                print(f"ERRO CRÍTICO: Falha ao inicializar o cliente Mistral. Verifique a API Key. Erro: {e}"); self.client = None
+            
     def _clean_and_filter(self, text_lines: list[str]) -> str:
-         # Delega para a função helper
+        # (Delega para a função helper)
         return clean_and_filter_lines(text_lines)
         
-    def _download_from_url(self, url: str) -> str | None:
-        # (Este método está correto)
-        try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk: tmp_file.write(chunk)
-                return tmp_file.name
-        except Exception: return None
+    # Removido _download_from_url pois só aceitamos URLs
 
     def _run(self, file_path: str) -> str:
-        """Executa a extração OCR no PDF usando EasyOCR."""
-        if not OCR_AVAILABLE: return "Erro: Ferramentas..."
-        if not self.reader: return "Erro: EasyOCR Reader..."
+        """Executa a extração OCR via API Mistral, aceitando apenas URLs."""
+        if not OCR_AVAILABLE: return "Erro: Falta 'mistralai'." 
+        if not self.client: return "Erro: Cliente Mistral não inicializado..."
         if not file_path or not isinstance(file_path, str): return f"Erro: 'file_path'..."
 
         parsed_url = urlparse(file_path)
         is_url = parsed_url.scheme in ['http', 'https']
-        temp_pdf_path_to_clean = None
-
-        if is_url:
-            local_pdf_path = self._download_from_url(file_path)
-            if not local_pdf_path: return f"Erro: download..."
-            temp_pdf_path_to_clean = local_pdf_path
-        elif os.path.exists(file_path): local_pdf_path = file_path
-        else: return f"Erro: arquivo não encontrado..."
         
-        all_ocr_text = []
+        if not is_url:
+            print(f"DEBUG: PDFToOCRTool recebeu um caminho local '{file_path}', que não é suportado.")
+            return "Erro: Esta ferramenta OCR só funciona com URLs públicas."
+
         try:
-            print(f"DEBUG: Abrindo PDF com PyMuPDF: {local_pdf_path}")
-            doc = fitz.open(local_pdf_path) 
+            print(f"DEBUG: Preparando para chamar Mistral OCR SDK para URL: {file_path}...")
             
-            for i, page in enumerate(doc):
-                print(f"DEBUG: Processando OCR na página {i+1}...")
-                all_ocr_text.append(f"\n--- DADOS OCR (PÁGINA {i+1}) ---\n")
+            ocr_response = self.client.ocr.process(
+                model="mistral-ocr-latest", 
+                document={
+                    "type": "document_url",
+                    "document_url": file_path 
+                }
+            )
                 
-                pix = page.get_pixmap(dpi=300) 
-                img_bytes = pix.tobytes("png") 
-                
-                # --- MUDANÇA: Tentar com paragraph=True ---
-                # Isso pode ajudar a agrupar texto relacionado
-                print("DEBUG: Chamando EasyOCR readtext com paragraph=True...")
-                results = self.reader.readtext(img_bytes, detail=0, paragraph=True) 
-                
-                # Se paragraph=True retornar vazio ou pouco, tentar sem
-                if not results or len(" ".join(results)) < 20: # Heurística simples
-                    print("DEBUG: paragraph=True deu pouco resultado, tentando com paragraph=False...")
-                    results = self.reader.readtext(img_bytes, detail=0, paragraph=False)
-                
-                # Junta as linhas/parágrafos detectados pelo EasyOCR
-                page_text = "\n".join(results)
-                print(f"DEBUG: Resultado bruto EasyOCR (Página {i+1}, após fallback se necessário): '{page_text[:150]}...'")
-
-                filtered_text = self._clean_and_filter(page_text.split('\n'))
-                all_ocr_text.append(filtered_text)
+            print("--- DEBUG RESPOSTA MISTRAL OCR ---")
+            print(f"Tipo da Resposta: {type(ocr_response)}")
+            try: print(f"Conteúdo (vars): {vars(ocr_response)}") 
+            except TypeError: print(f"Conteúdo (raw): {ocr_response}")
+            print("--- FIM DEBUG RESPOSTA ---")
             
-            doc.close()
-            print("DEBUG: Processamento OCR concluído.")
-            return "\n".join(all_ocr_text)
+            # --- CORREÇÃO: Extrair texto de ocr_response.pages[N].markdown ---
+            extracted_text = ""
+            if hasattr(ocr_response, 'pages') and isinstance(ocr_response.pages, list) and ocr_response.pages:
+                # Concatena o markdown de todas as páginas retornadas
+                all_markdowns = [getattr(page, "markdown", "") for page in ocr_response.pages]
+                extracted_text = "\n\n".join(md for md in all_markdowns if md) # Junta com duas quebras de linha entre páginas
+                if not extracted_text:
+                     print(f"AVISO: Atributo 'markdown' não encontrado ou vazio nos objetos OCRPageObject dentro de 'pages'. Resposta: {ocr_response}")
+            else:
+                 print(f"AVISO: Atributo 'pages' não encontrado, não é lista ou está vazio na resposta Mistral OCR. Resposta: {ocr_response}")
+            # --- FIM DA CORREÇÃO ---
 
-        except Exception as e:
-            import traceback
-            tb_str = traceback.format_exc()
-            print(f"ERRO DETALHADO OCR: {tb_str}") 
-            return (f"Erro durante o processo de OCR com EasyOCR: {str(e)}. Verifique deps.")
+            print(f"DEBUG: Texto bruto extraído da API Mistral: '{extracted_text[:150]}...'")
+
+            # Aplica o filtro
+            filtered_text = self._clean_and_filter(extracted_text.split('\n'))
+            print("DEBUG: Processamento OCR via API concluído.")
+            
+            output = f"\n--- DADOS OCR (API Mistral) ---\n"
+            if filtered_text:
+                output += filtered_text
+            else:
+                output += "(Nenhum dado relevante encontrado após o filtro)" 
+                print("DEBUG: Texto da API foi completamente filtrado ou estava vazio.")
+            return output
+
+        except Exception as api_error: 
+            # (Tratamento de erro permanece o mesmo)
+            error_message = f"Erro durante chamada da API Mistral (SDK): {type(api_error).__name__} - {api_error}. Verifique API Key/Permissões/URL."
+            if hasattr(api_error, 'response') and api_error.response is not None:
+                 error_message += f" Status: {api_error.response.status_code}. Detalhe: {api_error.response.text}"
+            print(error_message)
+            print(f"ERRO DETALHADO OCR:\n{traceback.format_exc()}") 
+            return error_message
         
-        finally:
-            if temp_pdf_path_to_clean and os.path.exists(temp_pdf_path_to_clean):
-                try: os.unlink(temp_pdf_path_to_clean)
-                except: pass
-
     async def _arun(self, file_path: str) -> str:
         """Versão assíncrona."""
         return await asyncio.to_thread(self._run, file_path=file_path)
