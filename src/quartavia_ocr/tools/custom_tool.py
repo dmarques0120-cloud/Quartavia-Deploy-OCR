@@ -3,6 +3,7 @@ import asyncio
 import os
 import tempfile
 import requests
+import re  # Para expressões regulares na filtragem
 from urllib.parse import urlparse
 from typing import Type, Any, ClassVar
 from crewai.tools import BaseTool
@@ -30,23 +31,73 @@ IGNORE_KEYWORDS_GLOBAL = [
     'resumo da fatura', 'despesas do mês', 'pontos loop', 'fatura anterior', 
     'créditos e estornos', 'total da fatura', 'juros', 'iof', 'taxas', 
     'lançamentos nacionais', 'compras à vista', 'outros valores', 'histórico',
-    'moeda de origem', 'cotação us$', 'aplicativo bradesco', 'situação do extrato'
+    'moeda de origem', 'cotação us$', 'aplicativo bradesco', 'situação do extrato',
+    # Novos filtros para remover informações irrelevantes
+    'pagamento via', 'qr code', 'boleto', 'escaneie', 'autenticação mecânica',
+    'ficha de compensação', 'força para pagar', 'parcelamento', 'parcela',
+    'próximo agendamento', 'simulação', 'super app', 'fatura atual',
+    'descritivo detalhado', 'pontos em', 'pontos a receber', 'débito automático',
+    'termos e condições', 'loop', 'elegíveis para pontuação', 'creditados',
+    'clientes inter', 'pagamento integral', 'dias úteis', 'olá', 'sua fatura chegou',
+    'caso o pagamento', 'prazo para reconhecimento', 'liberação do limite',
+    'faça o pagamento', 'limite será liberado', 'precisa de uma força',
+    'confira as opções', 'disponíveis pra você', 'caso opte pelo',
+    'importante saber', 'você pode acessar', 'essa é a soma', 'suas despesas',
+    'durante esse mês', 'mês passado', 'consulte os termos', 'após realizar',
+    'rotativo'
 ]
-KEEP_KEYWORDS_GLOBAL = ['saldo do dia']
+KEEP_KEYWORDS_GLOBAL = [
+    'saldo do dia', 'pix enviado', 'pix recebido', 'deposito', 'saque', 'ted',
+    'doc', 'transferencia', 'resgate', 'aplicacao', 'investimento', 'cartao',
+    'compra', 'posto', 'drogaria', 'supermercado', 'loja', 'pagamento on line',
+    'debito automatico', 'tarifa', 'anuidade', 'iof', 'saldo anterior',
+    'saldo atual', 'extrato', 'conta corrente', 'poupanca'
+]
 def clean_and_filter_lines(text_lines: list[str]) -> str:
-    # (Função inalterada)
+    """Filtra linhas para manter apenas transações e informações financeiras relevantes"""
     filtered_data = []
+    
     for line in text_lines:
         line_strip = line.strip()
-        if not line_strip or (len(line_strip) < 3 and not line_strip.lower() in ['r$', 'rs', 'usd', 'us$', 'uss']): continue
-        line_lower = line_strip.lower(); is_junk = any(keyword in line_lower for keyword in IGNORE_KEYWORDS_GLOBAL)
-        is_context_header = any(keyword in line_lower for keyword in KEEP_KEYWORDS_GLOBAL)
-        if is_junk and not is_context_header: continue
-        has_numbers_or_currency = (any(char.isdigit() for char in line_strip) or line_strip.lower() in ['r$', 'rs', 'usd', 'us$', 'uss'])
-        has_letters = any(c.isalpha() for c in line_strip)
-        if is_context_header or has_numbers_or_currency or (has_letters and not is_junk):
-             noise = ['rs', 'uss', 'usd', 'us$']
-             if line_lower not in noise or has_numbers_or_currency: filtered_data.append(line_strip)
+        if not line_strip or len(line_strip) < 3:
+            continue
+            
+        line_lower = line_strip.lower()
+        
+        # Verifica se é uma linha de transação ou informação relevante
+        is_transaction = (
+            # Linhas com datas e valores (padrão de transação)
+            bool(re.search(r'\d{2}.*de.*\d{4}.*r\$', line_lower)) or
+            # Linhas com valores monetários significativos
+            bool(re.search(r'r\$\s*\d+[.,]\d{2}', line_lower)) or
+            # Linhas com operações financeiras específicas
+            any(op in line_lower for op in ['pix enviado', 'pix recebido', 'deposito', 'saque', 'ted', 'doc', 'transferencia', 'resgate', 'aplicacao']) or
+            # Linhas com estabelecimentos comerciais
+            bool(re.search(r'(posto|drogaria|supermercado|loja|shopping|mercado)', line_lower)) or
+            # Linhas com saldo
+            'saldo' in line_lower
+        )
+        
+        # Verifica se deve ser ignorada (palavras-chave irrelevantes)
+        should_ignore = any(keyword in line_lower for keyword in IGNORE_KEYWORDS_GLOBAL)
+        
+        # Força manter se for palavra-chave importante
+        force_keep = any(keyword in line_lower for keyword in KEEP_KEYWORDS_GLOBAL)
+        
+        # Ignora linhas com apenas códigos de barras ou hashes
+        if re.match(r'^[\d\s\.\*]+$', line_strip) and len(line_strip) > 20:
+            continue
+            
+        # Ignora linhas com apenas asteriscos e números (número de cartão mascarado sozinho)
+        if re.match(r'^\d{4}\*+\d{4}$', line_strip):
+            continue
+            
+        # Adiciona à lista se for transação relevante e não deve ser ignorada
+        if (is_transaction or force_keep) and not should_ignore:
+            filtered_data.append(line_strip)
+        elif force_keep:  # Força manter mesmo se houver palavras para ignorar
+            filtered_data.append(line_strip)
+            
     return "\n".join(filtered_data)
 
 # ##################################################################
