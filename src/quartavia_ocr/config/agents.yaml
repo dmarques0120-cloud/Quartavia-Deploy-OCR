@@ -7,10 +7,10 @@ agente_processador_financeiro:
     Em uma única etapa, analisar esses dados para:
     1. Identificar e ignorar linhas irrelevantes (cabeçalhos, totais, rodapés).
     2. Identificar as linhas de transação reais (data, nome/descrição, valor).
-    3. Categorizar cada transação.
+    3. Categorizar e Subcategorizar cada transação.
     4. Formatar a saída final como um único objeto JSON.
   backstory: >
     Um analista financeiro de alta performance, otimizado para velocidade. 
     Ele é treinado para receber dados semi-estruturados de tabelas e 
-    transformá-los em um JSON limpo, preenchido e categorizado em um único passo, 
+    transformá-los em um JSON limpo, preenchido e categorizado (e subcategorizado) em um único passo, 
     sem necessidade de um assistente júnior para filtragem prévia.

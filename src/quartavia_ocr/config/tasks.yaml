@@ -25,11 +25,113 @@ tarefa_processamento_completo:
         - 'valor': O valor (sempre positivo, remova "R$" ou "-").
         - 'entrada ou saída': Determine se é 'entrada' ou 'saída'.
     
-    6.  **Categorizar:** Classifique a transação em uma das categorias: 
-        [Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, 
-        Dívidas e Empréstimos, Despesas Pessoais, Impostos e Taxas, 
-        Receitas (Salário/Renda), Investimentos, Resgates, 
-        Serviços Financeiros, Depósitos e Saques, Outros].
+    6.  **Categorizar e Subcategorizar:** Para cada transação, classifique primeiro em uma categoria principal e depois em uma subcategoria específica:
+        
+        **CATEGORIAS PRINCIPAIS:**
+        - MORADIA
+        - COMUNICACAO  
+        - ALIMENTACAO
+        - TRANSPORTE
+        - SAUDE
+        - CUIDADO_PESSOAL
+        - EDUCACAO
+        - LAZER
+        - SERVICOS_FINANCEIROS
+        - DIVERSOS
+        
+        **SUBCATEGORIAS por categoria (com exemplos de palavras-chave):**
+        
+        MORADIA: 
+        • Condomínio (ex: condomínio, taxa condominial)
+        • Aluguel (ex: aluguel, locação)
+        • Energia Elétrica (ex: Enel, Light, Cemig, energia, elétrica)
+        • Gás (ex: Ultragaz, Liquigás, gás)
+        • Água (ex: Sabesp, Cedae, água, saneamento)
+        • Serviços de limpeza / Faxina (ex: faxina, limpeza, diarista)
+        • Reforma / Manutenção / Jardineiro (ex: reforma, pintura, jardineiro, manutenção)
+        • Outras
+        
+        COMUNICACAO: 
+        • Telefone Celular (ex: Vivo, Tim, Claro, Oi, celular, telefone)
+        • Combo (TV + Internet + Tel) (ex: Sky, Net, Vivo Fibra, internet, TV)
+        • Apps (Netflix, Spotify, Prime, etc) (ex: Netflix, Spotify, Amazon Prime, Disney+, YouTube Premium, Apple Music, Deezer, HBO Max, Paramount+, apps, streaming)
+        • Outros
+        
+        ALIMENTACAO: 
+        • Supermercado (ex: Pão de Açúcar, Carrefour, Extra, supermercado, mercado)
+        • Refeições em restaurante (ex: restaurante, lanchonete, fast food, McDonald's, Burger King, iFood, Uber Eats, delivery)
+        • Feira (ex: feira, hortifruiti, sacolão)
+        • Padaria (ex: padaria, pão, confeitaria)
+        • Outros
+        
+        TRANSPORTE: 
+        • Combustível (ex: Petrobras, Shell, Ipiranga, posto, gasolina, etanol, combustível)
+        • Seguro (ex: seguro auto, Porto Seguro, Bradesco Seguros)
+        • IPVA (ex: IPVA, imposto veículo)
+        • Licenciamento (ex: licenciamento, DETRAN)
+        • Manutenção (ex: oficina, mecânico, troca óleo, revisão, pneu)
+        • Estacionamento (ex: estacionamento, zona azul, parking)
+        • Pedágio (ex: pedágio, CCR, Ecovias)
+        • Multas (ex: multa, infração, DETRAN)
+        • Uber (ex: Uber, 99, taxi, transporte app, Cabify)
+        • Lavagem / Higienização (ex: lava jato, lavagem, enceramento)
+        • Outros
+        
+        SAUDE: 
+        • Plano de Saúde (ex: Unimed, Bradesco Saúde, SulAmérica, plano saúde)
+        • Dentista (ex: dentista, ortodontia, odontologia)
+        • Medicamentos / Farmácia (ex: Drogaria, Farmácia, medicamento, remédio, Drogasil, Pacheco)
+        • Terapia / Tratamentos Contínuos (ex: fisioterapia, psicologia, terapia)
+        • Exames fora do plano (ex: laboratório, exame, Fleury, Dasa)
+        • Outras Consultas Fora do Plano (ex: consulta particular, médico particular)
+        • Outros
+        
+        CUIDADO_PESSOAL: 
+        • Vestuário / Calçados / Acessórios (ex: roupa, sapato, tênis, Zara, C&A, Renner, Shopping)
+        • Higiene pessoal (ex: shampoo, sabonete, perfume, O Boticário, Natura)
+        • Lavanderia (ex: lavanderia, tinturaria, lavagem roupa)
+        • Salão / Barbeiro / Manicure (ex: salão, cabeleireiro, barbeiro, manicure, estética)
+        • Academia / Esportes (ex: academia, Smart Fit, ginástica, pilates, crossfit)
+        • Suplemento Alimentar (ex: whey, suplemento, Growth, Integral Médica)
+        • Outros
+        
+        EDUCACAO: 
+        • Graduação (ex: faculdade, universidade, graduação, mensalidade)
+        • Pós-Graduação (ex: pós, MBA, mestrado, doutorado, especialização)
+        • Cursos e Congressos (ex: curso, congresso, seminário, workshop)
+        • Cursos de Extensão (ex: extensão, certificação, capacitação)
+        • Mentorias (ex: mentoria, coaching, consultoria educacional)
+        • Idiomas (ex: inglês, espanhol, Wizard, CNA, CCAA, idioma)
+        • Outros
+        
+        LAZER: 
+        • Cinema / Teatro / Shows/ Jantares (ex: cinema, teatro, show, concerto, jantar, bar, balada, festa, entretenimento)
+        • Livros (ex: livro, livraria, Saraiva, Amazon livros, literatura)
+        • Viagens (ex: viagem, hotel, pousada, passagem, avião, ônibus, rodoviária, aeroporto, Booking, Airbnb, Latam, Gol, Azul, Delta, American Airlines, United, TAP, companhia aérea)
+        • Outros
+        
+        SERVICOS_FINANCEIROS: 
+        • Tarifas Bancárias (ex: tarifa, banco, taxa bancária, manutenção conta)
+        • Anuidade Cartão Crédito (ex: anuidade, cartão crédito, Visa, Mastercard)
+        • Transferências (ex: transferência, PIX, TED, DOC)
+        • Depósitos (ex: depósito, aplicação)
+        • Outros
+        
+        DIVERSOS: 
+        • Animais de estimação (ex: pet shop, veterinário, ração, animal)
+        • Presentes (ex: presente, gift, loja presente)
+        • Doações (ex: doação, caridade, ONG)
+        • Impostos (ex: imposto de renda, IRPF, tributo, receita federal)
+        • Advogado (ex: advogado, advocacia, jurídico, cartório)
+        • Outros
+        
+        **INSTRUÇÕES IMPORTANTES:**
+        - Analise cuidadosamente o nome da transação
+        - Procure por palavras-chave específicas mencionadas nos exemplos
+        - Se encontrar uma palavra-chave específica (ex: "Spotify"), use a subcategoria correspondente (ex: COMUNICACAO > Apps)
+        - Para companhias aéreas (Delta, Latam, Gol, etc.), sempre use LAZER > Viagens
+        - Para serviços de streaming (Netflix, Spotify, etc.), sempre use COMUNICACAO > Apps
+        - Se não encontrar uma correspondência exata, use a categoria mais lógica baseada no contexto
 
     Compile TODAS as transações válidas que você encontrar em um único 
     objeto JSON formatado.
@@ -41,4 +143,4 @@ tarefa_processamento_completo:
   agent: agente_processador_financeiro
   expected_output: >
     Um único bloco de string JSON contendo uma lista de todas as transações, 
-    cada uma com 'data', 'nome', 'valor', 'categoria' e 'entrada ou saída'.
+    cada uma com 'data', 'nome', 'valor', 'categoria', 'subcategoria' e 'entrada ou saída'.
