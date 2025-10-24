@@ -6,19 +6,31 @@ tarefa_processamento_completo:
     1.  **PRIMEIRA TENTATIVA:** Use a ferramenta "Extrator de PDF Nativo". 
         Esta é a ferramenta preferida e mais rápida.
     
-    2.  **SE FALHAR:** Se a "Extrator de PDF Nativo" retornar um erro 
-        (especialmente um erro dizendo "O PDF parece ser uma imagem"), 
-        então, e *somente então*, use a ferramenta "Extrator de PDF (OCR)" 
-        no mesmo {file_path}.
+    2.  **CRITÉRIO PARA OCR:** Use a ferramenta "Extrator de PDF (OCR)" 
+        APENAS se a "Extrator de PDF Nativo" retornar um erro explícito 
+        (especialmente "O PDF parece ser uma imagem") OU se retornar 
+        menos de 50 caracteres de texto útil. 
+        Se o extrator nativo retornar texto substancial (mais de 50 caracteres),
+        NÃO use o OCR - prossiga diretamente para a análise.
     
     3.  **ANALISAR E FORMATAR:** Assim que tiver o texto de UMA das ferramentas,
-        analise-o.
+        analise-o COMPLETAMENTE e MINUCIOSAMENTE.
 
-    4.  **Filtrar:** Ignore mentalmente todas as linhas que são 
-        cabeçalhos ("Data", "Movimentação"), rodapés ("Total"), saldos 
-        ("Saldo do dia:") ou qualquer texto que não seja uma transação real.
-    
-    5.  **Extrair:** Para cada transação real que encontrar, extraia:
+    4.  **VARREDURA COMPLETA:** Examine CADA linha do texto extraído.
+        Procure por TODOS os padrões de transação, incluindo:
+        - Linhas com valores monetários (R$ X,XX)
+        - Linhas com datas seguidas de descrições e valores
+        - Linhas que contenham nomes de estabelecimentos
+        - Linhas isoladas de valores que possam estar relacionadas à linha anterior
+        - Linhas com códigos de transação ou referências
+        
+    5.  **Filtrar:** Ignore APENAS:
+        - Cabeçalhos explícitos ("Data", "Movimentação", "Histórico")
+        - Rodapés de totais ("Total da fatura", "Total de compras")
+        - Informações de saldo quando não forem transações
+        - Informações de taxas e juros quando forem apenas informativos
+        
+    6.  **EXTRAIR TODAS:** Para CADA transação que encontrar, extraia:
         - 'data': A data da transação (formato YYYY-MM-DD se possível)
         - 'descricao': A descrição/nome da transação
         - 'valor': O valor (sempre positivo como float, remova "R$", "-", vírgulas)
@@ -27,7 +39,11 @@ tarefa_processamento_completo:
         - 'numero_parcelas': Se parcelado, extraia o número atual da parcela
         - 'total_parcelas': Se parcelado, extraia o total de parcelas
     
-    6.  **Categorizar e Subcategorizar:** Para cada transação, classifique primeiro em uma categoria principal e depois em uma subcategoria específica:
+    7.  **IMPORTANTE:** Se encontrar linhas com apenas valores (ex: "R$ 228,66") 
+        que estejam próximas a descrições em linhas separadas, 
+        tente relacioná-las à transação mais provável.
+        
+    8.  **Categorizar e Subcategorizar:** Para cada transação, classifique primeiro em uma categoria principal e depois em uma subcategoria específica:
         
         **CATEGORIAS PRINCIPAIS:**
         - MORADIA
@@ -141,9 +157,16 @@ tarefa_processamento_completo:
         - APENAS use DIVERSOS quando a transação realmente não se encaixar em nenhuma das outras 9 categorias
         
         **DETECÇÃO DE PARCELAMENTO:**
-        - Procure por padrões como: "1/12", "02/10", "PARC 3/6", "PARCELA 1 DE 12"
+        - Procure por padrões como: "1/12", "02/10", "PARC 3/6", "PARCELA 1 DE 12", "(3/9)"
         - Se encontrar, defina parcelado=true e extraia os números
         - Se não encontrar indicadores, defina parcelado=false, numero_parcelas=null, total_parcelas=null
+        
+        **REGRA CRÍTICA DE EXTRAÇÃO COMPLETA:**
+        - NUNCA pule uma transação que tenha um valor monetário identificável
+        - Se uma linha contém R$ seguido de um número, considere-a uma possível transação
+        - Prefira incluir transações duvidosas a omiti-las
+        - Se não conseguir identificar a descrição completa, use o texto disponível
+        - Para linhas com valores isolados, tente associar com contexto próximo
         
         **TIPO DE DOCUMENTO:**
         - Se contém cabeçalhos como "FATURA", "CARTÃO", "CARD", use "credit-card-statement"
