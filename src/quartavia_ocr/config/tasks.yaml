@@ -19,11 +19,13 @@ tarefa_processamento_completo:
         ("Saldo do dia:") ou qualquer texto que não seja uma transação real.
     
     5.  **Extrair:** Para cada transação real que encontrar, extraia:
-        - 'data': A data da transação. (Atenção: em extratos, a data 
-          pode ser um cabeçalho de seção).
-        - 'nome': A descrição da transação.
-        - 'valor': O valor (sempre positivo, remova "R$" ou "-").
-        - 'entrada ou saída': Determine se é 'entrada' ou 'saída'.
+        - 'data': A data da transação (formato YYYY-MM-DD se possível)
+        - 'descricao': A descrição/nome da transação
+        - 'valor': O valor (sempre positivo como float, remova "R$", "-", vírgulas)
+        - 'tipo': Determine se é 'despesa' ou 'receita'
+        - 'parcelado': Analise se a transação é parcelada (procure por indicadores como "1/12", "2/10", "PARC", "PARCELA", etc.)
+        - 'numero_parcelas': Se parcelado, extraia o número atual da parcela
+        - 'total_parcelas': Se parcelado, extraia o total de parcelas
     
     6.  **Categorizar e Subcategorizar:** Para cada transação, classifique primeiro em uma categoria principal e depois em uma subcategoria específica:
         
@@ -125,22 +127,85 @@ tarefa_processamento_completo:
         • Advogado (ex: advogado, advocacia, jurídico, cartório)
         • Outros
         
-        **INSTRUÇÕES IMPORTANTES:**
-        - Analise cuidadosamente o nome da transação
+        **INSTRUÇÕES CRÍTICAS DE CATEGORIZAÇÃO:**
+        - EVITE usar DIVERSOS como primeira opção - use apenas quando realmente não houver outra categoria aplicável
+        - Analise MUITO cuidadosamente o nome da transação antes de categorizar
         - Procure por palavras-chave específicas mencionadas nos exemplos
         - Se encontrar uma palavra-chave específica (ex: "Spotify"), use a subcategoria correspondente (ex: COMUNICACAO > Apps)
         - Para companhias aéreas (Delta, Latam, Gol, etc.), sempre use LAZER > Viagens
         - Para serviços de streaming (Netflix, Spotify, etc.), sempre use COMUNICACAO > Apps
+        - Para restaurantes, lanchonetes, delivery, sempre use ALIMENTACAO > Refeições em restaurante
+        - Para postos de gasolina, sempre use TRANSPORTE > Combustível
+        - Para farmácias e drogarias, sempre use SAUDE > Medicamentos / Farmácia
         - Se não encontrar uma correspondência exata, use a categoria mais lógica baseada no contexto
+        - APENAS use DIVERSOS quando a transação realmente não se encaixar em nenhuma das outras 9 categorias
+        
+        **DETECÇÃO DE PARCELAMENTO:**
+        - Procure por padrões como: "1/12", "02/10", "PARC 3/6", "PARCELA 1 DE 12"
+        - Se encontrar, defina parcelado=true e extraia os números
+        - Se não encontrar indicadores, defina parcelado=false, numero_parcelas=null, total_parcelas=null
+        
+        **TIPO DE DOCUMENTO:**
+        - Se contém cabeçalhos como "FATURA", "CARTÃO", "CARD", use "credit-card-statement"
+        - Se contém "EXTRATO", "CONTA CORRENTE", "POUPANÇA", use "extrato"  
+        - Se não conseguir determinar, use "other"
 
     Compile TODAS as transações válidas que você encontrar em um único 
-    objeto JSON formatado.
+    objeto JSON formatado seguindo esta estrutura:
+    
+    {
+      "success": true,
+      "bank_name": "TBD",
+      "document_type": "[DETERMINE: 'extrato' para extratos bancários, 'credit-card-statement' para faturas de cartão, 'other' para outros tipos]",
+      "transactions_count": [NÚMERO_TOTAL_DE_TRANSAÇÕES],
+      "transactions": [
+        {
+          "uuid": "1",
+          "data": "YYYY-MM-DD",
+          "descricao": "Descrição da transação",
+          "valor": 99.99,
+          "categoria": "CATEGORIA_PRINCIPAL",
+          "tipo": "despesa ou receita",
+          "subcategoria": "Subcategoria específica",
+          "parcelado": true
+          // APENAS inclua os campos abaixo SE parcelado=true:
+          "numero_parcelas": 1,
+          "total_parcelas": 12
+        },
+        {
+          "uuid": "1",
+          "data": "YYYY-MM-DD",
+          "descricao": "Outra transação não parcelada",
+          "valor": 50.00,
+          "categoria": "ALIMENTACAO",
+          "tipo": "despesa",
+          "subcategoria": "Supermercado",
+          "parcelado": false
+          // Não incluir numero_parcelas e total_parcelas quando parcelado=false
+        }
+      ],
+      "error_message": null
+    }
+    
+    **IMPORTANTE SOBRE UUID:** Sempre use "1" para TODAS as transações. Não numere sequencialmente (1, 2, 3...). O uuid representa o ID do usuário, não da transação.
+    
+    **IMPORTANTE SOBRE PARCELAMENTO:** Se parcelado=false, NÃO inclua os campos numero_parcelas e total_parcelas no JSON.
     
     **IMPORTANTE: Não invente dados. Se os dados da ferramenta 
-    estiverem vazios ou não contiverem transações, retorne um JSON 
-    com uma lista vazia.**
+    estiverem vazios ou não contiverem transações, retorne:**
+    
+    {
+      "success": false,
+      "bank_name": "TBD", 
+      "document_type": "unknown",
+      "transactions_count": 0,
+      "transactions": [],
+      "error_message": "Nenhuma transação encontrada no documento"
+    }
     
   agent: agente_processador_financeiro
   expected_output: >
-    Um único bloco de string JSON contendo uma lista de todas as transações, 
-    cada uma com 'data', 'nome', 'valor', 'categoria', 'subcategoria' e 'entrada ou saída'.
+    Um objeto JSON completo seguindo a estrutura ExtractionResult com todos os campos necessários:
+    success, bank_name, document_type, transactions_count, transactions (com todos os campos incluindo 
+    uuid, data, descricao, valor, categoria, tipo, subcategoria, parcelado, numero_parcelas, total_parcelas) 
+    e error_message.
